@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import requests
 import pandas as pd
 from datetime import datetime
@@ -5,13 +7,16 @@ import json
 import subprocess
 import os
 
-def import_public_key(key_file_path):
+def import_public_key(file_path="DSGJPMUAT-Public.asc"):
     """
-    Imports a public key from a file into the local GPG keyring.
+    Imports a public key from a given file path into the GPG keyring.
     """
-    print(f"Importing the public key from {key_file_path} into the GPG keyring...")
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The file '{file_path}' does not exist.")
+
+    print(f"Importing the public key from '{file_path}' into the GPG keyring...")
     result = subprocess.run(
-        ["gpg", "--import", key_file_path],
+        ["gpg", "--import", file_path],
         capture_output=True,
         text=True
     )
@@ -43,7 +48,13 @@ def fetch_data_from_erp():
 
     while True:
         params = {
-            'fields': '["naming_series","company","payment_order_type","party","posting_date","company_bank","company_bank_account","account","references.reference_name","references.amount","references.supplier","references.payment_request","references.mode_of_payment","references.bank_account","references.account","references.payment_reference"]',
+            'fields': json.dumps([
+                "naming_series", "company", "payment_order_type", "party", "posting_date",
+                "company_bank", "company_bank_account", "account", "references.reference_name",
+                "references.amount", "references.supplier", "references.payment_request",
+                "references.mode_of_payment", "references.bank_account", "references.account",
+                "references.payment_reference"
+            ]),
             'filters': json.dumps([
                 ["company_bank_account", "=", "DBS Bank Limited - INR"],
                 ["posting_date", "=", today_date]
@@ -116,9 +127,10 @@ def create_local_text_file(payment_orders, local_filename):
 def encrypt_file_gpg(input_file):
     """
     Encrypts `input_file` using GPG, saving as `input_file + ".pgp"`.
+    The recipient is determined by the imported public key.
     """
     output_file = input_file + ".pgp"
-    recipient = "eklavya.bhardwaj@electrolabgroup.com"
+    recipient = "DSGJPMUAT"  # Replace with the actual UID from the imported public key if necessary.
 
     cmd = [
         "gpg",
@@ -174,17 +186,14 @@ bye
         raise RuntimeError("SFTP upload failed")
 
 def main():
-    # Path to the DSGJPMUAT-Public file
-    key_file_path = "DSGJPMUAT-Public.asc"
-
-    # A) Import the provided public key from the file
-    import_public_key(key_file_path)
+    # A) Import the public key from file
+    import_public_key("DSGJPMUAT-Public.asc")
 
     # B) Fetch ERPNext data
     payment_orders = fetch_data_from_erp()
 
     # C) Our desired plaintext file name includes ".TXT."
-    original_file = "UFF2.FORMAT362.INELTR01.INELTR01.271220241428.TXT.DBSSINBB"
+    original_file = "UFF2.FORMAT362.INELTR01.INELTR01.311220241431.TXT.DBSSINBB"
     create_local_text_file(payment_orders, original_file)
 
     # D) Encrypt => final name: "UFF2.FORMAT362.INELTR01.INELTR01.271220241428.TXT.DBSSINBB.pgp"
